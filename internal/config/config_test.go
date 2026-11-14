@@ -48,6 +48,38 @@ targets:
 	}
 }
 
+func TestLoadTCPTarget(t *testing.T) {
+	const content = `
+targets:
+  - name: db
+    type: tcp
+    addr: db.local:5432
+`
+	cfg, err := Load(writeConfig(t, content))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	db := cfg.Targets[0]
+	if db.Type != TypeTCP || db.Addr != "db.local:5432" {
+		t.Errorf("unexpected tcp target: %+v", db)
+	}
+}
+
+func TestLoadDefaultTypeIsHTTP(t *testing.T) {
+	const content = `
+targets:
+  - name: example
+    url: https://example.com
+`
+	cfg, err := Load(writeConfig(t, content))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Targets[0].Type != TypeHTTP {
+		t.Errorf("want default type %q, got %q", TypeHTTP, cfg.Targets[0].Type)
+	}
+}
+
 func TestLoadInterval(t *testing.T) {
 	const content = `
 interval: 2s
@@ -66,9 +98,9 @@ targets:
 
 func TestLoadInvalidInterval(t *testing.T) {
 	cases := map[string]string{
-		"too small":    "interval: 500ms\n",
-		"negative":     "interval: -1s\n",
-		"unparsable":   "interval: soon\n",
+		"too small":  "interval: 500ms\n",
+		"negative":   "interval: -1s\n",
+		"unparsable": "interval: soon\n",
 	}
 	for name, interval := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -105,6 +137,10 @@ func TestLoadInvalidTarget(t *testing.T) {
 		"unsupported scheme": "targets:\n  - name: a\n    url: ftp://example.com\n",
 		"negative timeout":   "targets:\n  - name: a\n    url: https://example.com\n    timeout: -1s\n",
 		"unparsable timeout": "targets:\n  - name: a\n    url: https://example.com\n    timeout: later\n",
+		"http without url":   "targets:\n  - name: a\n    type: http\n",
+		"tcp without addr":   "targets:\n  - name: a\n    type: tcp\n",
+		"tcp addr no port":   "targets:\n  - name: a\n    type: tcp\n    addr: db.local\n",
+		"unknown type":       "targets:\n  - name: a\n    type: icmp\n    url: https://example.com\n",
 	}
 	for name, content := range cases {
 		t.Run(name, func(t *testing.T) {

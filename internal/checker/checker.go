@@ -2,51 +2,43 @@ package checker
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
 	"pinGo/internal/config"
+	"pinGo/internal/probe"
 )
-
-const userAgent = "pingo/0.1 (+https://github.com/Vas-Yarik/pinGo)"
 
 type Result struct {
 	Target  config.Target
 	Up      bool
-	Status  int
 	Latency time.Duration
+	Detail  string
 	Err     error
 }
 
-type Checker struct {
-	client *http.Client
-}
+type Checker struct{}
 
 func New() *Checker {
-	return &Checker{client: &http.Client{}}
+	return &Checker{}
 }
 
 func (c *Checker) Ping(ctx context.Context, t config.Target) Result {
 	ctx, cancel := context.WithTimeout(ctx, t.ResolvedTimeout())
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.URL, nil)
+	p, err := probe.For(t.Type)
 	if err != nil {
-		return Result{Target: t, Err: fmt.Errorf("build request: %w", err)}
+		return Result{Target: t, Err: err}
 	}
-	req.Header.Set("User-Agent", userAgent)
-
-	start := time.Now()
-	resp, err := c.client.Do(req)
-	latency := time.Since(start)
-	if err != nil {
-		return Result{Target: t, Latency: latency, Err: err}
+	out := p.Check(ctx, t)
+	return Result{
+		Target:  t,
+		Up:      out.Err == nil,
+		Latency: out.Latency,
+		Detail:  out.Detail,
+		Err:     out.Err,
 	}
-	defer resp.Body.Close()
-
-	return Result{Target: t, Up: true, Status: resp.StatusCode, Latency: latency}
 }
 
 func (c *Checker) PingAll(ctx context.Context, targets []config.Target) []Result {

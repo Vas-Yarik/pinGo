@@ -6,4 +6,9 @@ targets:
 
   - name: google
     url: https://www.google.com
-    timeout: 5s
+    timeout: 2s
+
+  - name: postgres
+    type: tcp
+    addr: db.internal:5432
+    timeout: 3s

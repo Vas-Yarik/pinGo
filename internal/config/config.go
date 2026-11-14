@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"time"
@@ -10,9 +11,12 @@ import (
 )
 
 const (
-	DefaultTimeout   = 5 * time.Second
-	DefaultInterval  = 30 * time.Second
-	MinInterval      = time.Second
+	DefaultTimeout  = 5 * time.Second
+	DefaultInterval = 30 * time.Second
+	MinInterval     = time.Second
+
+	TypeHTTP = "http"
+	TypeTCP  = "tcp"
 )
 
 type Config struct {
@@ -22,7 +26,9 @@ type Config struct {
 
 type Target struct {
 	Name    string        `yaml:"name"`
-	URL     string        `yaml:"url"`
+	Type    string        `yaml:"type,omitempty"`
+	URL     string        `yaml:"url,omitempty"`
+	Addr    string        `yaml:"addr,omitempty"`
 	Timeout time.Duration `yaml:"timeout,omitempty"`
 }
 
@@ -71,9 +77,21 @@ func (c *Config) validate() error {
 		}
 		seen[t.Name] = struct{}{}
 
-		u, err := url.Parse(t.URL)
-		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
-			return fmt.Errorf("config: target %q: url must be an absolute http(s) URL, got %q", t.Name, t.URL)
+		if t.Type == "" {
+			t.Type = TypeHTTP
+		}
+		switch t.Type {
+		case TypeHTTP:
+			u, err := url.Parse(t.URL)
+			if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+				return fmt.Errorf("config: target %q: url must be an absolute http(s) URL, got %q", t.Name, t.URL)
+			}
+		case TypeTCP:
+			if _, port, err := net.SplitHostPort(t.Addr); err != nil || port == "" {
+				return fmt.Errorf("config: target %q: addr must be host:port, got %q", t.Name, t.Addr)
+			}
+		default:
+			return fmt.Errorf("config: target %q: type must be %q or %q, got %q", t.Name, TypeHTTP, TypeTCP, t.Type)
 		}
 		if t.Timeout < 0 {
 			return fmt.Errorf("config: target %q: timeout must not be negative", t.Name)

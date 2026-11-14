@@ -1,0 +1,9 @@
+interval: 30s
+
+targets:
+  - name: example
+    url: https://example.com
+
+  - name: google
+    url: https://www.google.com
+    timeout: 5s

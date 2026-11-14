@@ -8,8 +8,8 @@ import (
 type Record struct {
 	Target    string
 	Up        bool
-	Status    int
 	LatencyMS int64
+	Detail    string
 	Err       string
 	At        time.Time
 }

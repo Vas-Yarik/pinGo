@@ -20,9 +20,9 @@ func writeConfig(t *testing.T, content string) string {
 	return path
 }
 
-func runWithConfig(t *testing.T, configPath string) (int, string) {
+func runWithConfig(t *testing.T, configPath string, extra ...string) (int, string) {
 	t.Helper()
-	os.Args = []string{"pingo", "-config", configPath}
+	args := append(append([]string{}, extra...), "-config", configPath)
 
 	oldStdout := os.Stdout
 	r, w, err := os.Pipe()
@@ -30,7 +30,7 @@ func runWithConfig(t *testing.T, configPath string) (int, string) {
 		t.Fatal(err)
 	}
 	os.Stdout = w
-	code := run()
+	code := run(args)
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -55,6 +55,21 @@ func TestRunAllTargetsUp(t *testing.T) {
 	}
 	if !strings.Contains(out, "1/1 targets up") {
 		t.Errorf("want summary \"1/1 targets up\", got:\n%s", out)
+	}
+}
+
+func TestRunCheckSubcommand(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	code, out := runWithConfig(t, writeConfig(t, "targets:\n  - name: test\n    url: "+srv.URL+"\n"), "check")
+	if code != exitOK {
+		t.Fatalf("want exit code %d, got %d\noutput:\n%s", exitOK, code, out)
+	}
+	if !strings.Contains(out, "HTTP 200") {
+		t.Errorf("want detail column \"HTTP 200\", got:\n%s", out)
 	}
 }
 
@@ -88,6 +103,30 @@ targets:
 	}
 	if !strings.Contains(out, "1/2 targets up") {
 		t.Errorf("want summary \"1/2 targets up\", got:\n%s", out)
+	}
+}
+
+func TestRunTCPTargetUp(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+
+	code, out := runWithConfig(t, writeConfig(t,
+		"targets:\n  - name: db\n    type: tcp\n    addr: "+l.Addr().String()+"\n"))
+	if code != exitOK {
+		t.Fatalf("want exit code %d, got %d\noutput:\n%s", exitOK, code, out)
+	}
+	if !strings.Contains(out, "tcp "+l.Addr().String()) {
+		t.Errorf("want tcp detail, got:\n%s", out)
+	}
+}
+
+func TestRunWatchRequiresTerminal(t *testing.T) {
+	code, _ := runWithConfig(t, writeConfig(t, "targets:\n  - name: test\n    url: https://example.com\n"), "watch")
+	if code != exitError {
+		t.Fatalf("want exit code %d for watch without a TTY, got %d", exitError, code)
 	}
 }
 

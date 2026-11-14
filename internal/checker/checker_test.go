@@ -16,6 +16,10 @@ func target(url string, timeout time.Duration) config.Target {
 	return config.Target{Name: "test", URL: url, Timeout: timeout}
 }
 
+func tcpTarget(addr string, timeout time.Duration) config.Target {
+	return config.Target{Name: "db", Type: config.TypeTCP, Addr: addr, Timeout: timeout}
+}
+
 func TestPingUp(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("User-Agent"); !strings.HasPrefix(got, "pingo/") {
@@ -29,8 +33,8 @@ func TestPingUp(t *testing.T) {
 	if !res.Up {
 		t.Fatalf("want up, got down: %v", res.Err)
 	}
-	if res.Status != http.StatusOK {
-		t.Errorf("want status 200, got %d", res.Status)
+	if res.Detail != "HTTP 200" {
+		t.Errorf("want detail \"HTTP 200\", got %q", res.Detail)
 	}
 	if res.Latency < 0 {
 		t.Errorf("negative latency: %v", res.Latency)
@@ -47,8 +51,8 @@ func TestPingErrorResponseIsUp(t *testing.T) {
 	if !res.Up {
 		t.Fatalf("want up for a 404 response, got down: %v", res.Err)
 	}
-	if res.Status != http.StatusNotFound {
-		t.Errorf("want status 404, got %d", res.Status)
+	if res.Detail != "HTTP 404" {
+		t.Errorf("want detail \"HTTP 404\", got %q", res.Detail)
 	}
 }
 
@@ -86,6 +90,51 @@ func TestPingConnectionRefused(t *testing.T) {
 	}
 }
 
+func TestPingTCPUp(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+
+	res := New().Ping(context.Background(), tcpTarget(l.Addr().String(), time.Second))
+	if !res.Up {
+		t.Fatalf("want up, got down: %v", res.Err)
+	}
+	if res.Detail != "tcp "+l.Addr().String() {
+		t.Errorf("unexpected detail %q", res.Detail)
+	}
+}
+
+func TestPingTCPRefused(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := l.Addr().String()
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	res := New().Ping(context.Background(), tcpTarget(addr, 2*time.Second))
+	if res.Up {
+		t.Fatal("want down for a closed port")
+	}
+	if res.Err == nil {
+		t.Fatal("want error, got nil")
+	}
+}
+
+func TestPingUnknownType(t *testing.T) {
+	res := New().Ping(context.Background(), config.Target{Name: "x", Type: "icmp", Addr: "h:1"})
+	if res.Up {
+		t.Fatal("want down for an unknown probe type")
+	}
+	if res.Err == nil {
+		t.Fatal("want error, got nil")
+	}
+}
+
 func TestPingAllRunsConcurrentlyAndKeepsOrder(t *testing.T) {
 	const n = 4
 	srvs := make([]*httptest.Server, n)
@@ -110,8 +159,8 @@ func TestPingAllRunsConcurrentlyAndKeepsOrder(t *testing.T) {
 		if !res.Up {
 			t.Errorf("target %d: want up, got %v", i, res.Err)
 		}
-		if res.Status != http.StatusTeapot {
-			t.Errorf("target %d: want status 418, got %d", i, res.Status)
+		if res.Detail != "HTTP 418" {
+			t.Errorf("target %d: want detail \"HTTP 418\", got %q", i, res.Detail)
 		}
 		if res.Target.URL != srvs[i].URL {
 			t.Errorf("target %d: result order does not match input order", i)

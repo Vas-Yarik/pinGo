@@ -2,7 +2,6 @@ package monitor
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -24,7 +23,7 @@ type Waiter func(ctx context.Context, d time.Duration) error
 type TargetState struct {
 	Name      string
 	Up        bool
-	Status    int
+	Detail    string
 	Latency   time.Duration
 	Err       string
 	CheckedAt time.Time
@@ -45,7 +44,7 @@ type targetState struct {
 	name      string
 	checked   bool
 	up        bool
-	status    int
+	detail    string
 	latency   time.Duration
 	err       string
 	checkedAt time.Time
@@ -108,8 +107,8 @@ func (m *Monitor) PollOnce(ctx context.Context) {
 		rec := store.Record{
 			Target:    r.Target.Name,
 			Up:        r.Up,
-			Status:    r.Status,
 			LatencyMS: r.Latency.Milliseconds(),
+			Detail:    r.Detail,
 			At:        time.Now(),
 		}
 		if r.Err != nil {
@@ -145,7 +144,7 @@ func (m *Monitor) Snapshot() Snapshot {
 		ts := TargetState{
 			Name:      s.name,
 			Up:        s.up,
-			Status:    s.status,
+			Detail:    s.detail,
 			Latency:   s.latency,
 			Err:       s.err,
 			CheckedAt: s.checkedAt,
@@ -174,15 +173,23 @@ func (m *Monitor) record(results []checker.Result) []notify.Event {
 		if s.checked {
 			switch {
 			case s.up && !r.Up:
-				e = &notify.Event{Target: r.Target.Name, Transition: notify.TransitionDown, Detail: r.Err.Error(), At: now}
+				detail := ""
+				if r.Err != nil {
+					detail = r.Err.Error()
+				}
+				e = &notify.Event{Target: r.Target.Name, Transition: notify.TransitionDown, Detail: detail, At: now}
 			case !s.up && r.Up:
-				e = &notify.Event{Target: r.Target.Name, Transition: notify.TransitionRecovered, Detail: fmt.Sprintf("status %d, latency %s", r.Status, r.Latency.Round(time.Millisecond)), At: now}
+				detail := r.Detail
+				if r.Latency > 0 {
+					detail += " · " + r.Latency.Round(time.Millisecond).String()
+				}
+				e = &notify.Event{Target: r.Target.Name, Transition: notify.TransitionRecovered, Detail: detail, At: now}
 			}
 		}
 
 		s.checked = true
 		s.up = r.Up
-		s.status = r.Status
+		s.detail = r.Detail
 		s.latency = r.Latency
 		s.checkedAt = now
 		s.polls++

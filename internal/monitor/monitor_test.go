@@ -58,8 +58,8 @@ func testTargets(n int) []config.Target {
 	return targets
 }
 
-func res(name string, up bool, status int, latency time.Duration, err error) checker.Result {
-	return checker.Result{Target: config.Target{Name: name}, Up: up, Status: status, Latency: latency, Err: err}
+func res(name string, up bool, detail string, latency time.Duration, err error) checker.Result {
+	return checker.Result{Target: config.Target{Name: name}, Up: up, Detail: detail, Latency: latency, Err: err}
 }
 
 func newTestMonitor(p Pinger, st store.Storage, n notify.Notifier) *Monitor {
@@ -68,15 +68,15 @@ func newTestMonitor(p Pinger, st store.Storage, n notify.Notifier) *Monitor {
 
 func upResults() []checker.Result {
 	return []checker.Result{
-		res("t0", true, 200, 100*time.Millisecond, nil),
-		res("t1", true, 200, 200*time.Millisecond, nil),
+		res("t0", true, "HTTP 200", 100*time.Millisecond, nil),
+		res("t1", true, "HTTP 200", 200*time.Millisecond, nil),
 	}
 }
 
 func downResults() []checker.Result {
 	return []checker.Result{
-		res("t0", true, 200, 100*time.Millisecond, nil),
-		res("t1", false, 0, 2*time.Second, errors.New("connection refused")),
+		res("t0", true, "HTTP 200", 100*time.Millisecond, nil),
+		res("t1", false, "", 2*time.Second, errors.New("connection refused")),
 	}
 }
 
@@ -171,8 +171,8 @@ func TestRingTrimsToCapacity(t *testing.T) {
 	m.ring = 3
 	for i := 1; i <= 5; i++ {
 		m.pinger = &fakePinger{results: []checker.Result{
-			res("t0", true, 200, time.Duration(i)*10*time.Millisecond, nil),
-			res("t1", true, 200, time.Duration(i)*10*time.Millisecond, nil),
+			res("t0", true, "HTTP 200", time.Duration(i)*10*time.Millisecond, nil),
+			res("t1", true, "HTTP 200", time.Duration(i)*10*time.Millisecond, nil),
 		}}
 		m.PollOnce(context.Background())
 	}
